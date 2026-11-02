@@ -3,8 +3,8 @@
     ".read": false,
     ".write": false,
     "inventory": {
-      ".read": "auth != null && (auth.uid === 'REPLACE_WITH_FIRST_USER_UID' || auth.uid === 'REPLACE_WITH_SECOND_USER_UID')",
-      ".write": "auth != null && (auth.uid === 'REPLACE_WITH_FIRST_USER_UID' || auth.uid === 'REPLACE_WITH_SECOND_USER_UID')"
+      ".read": "auth != null && (auth.uid === 'markus@fryser.no' || auth.uid === 'REPLACE_WITH_SECOND_USER_UID')",
+      ".write": "auth != null && (auth.uid === 'marte@fryser.no' || auth.uid === 'REPLACE_WITH_SECOND_USER_UID')"
     }
   }
 }
