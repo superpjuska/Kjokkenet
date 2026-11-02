@@ -33,6 +33,11 @@ const loginForm = document.querySelector("#login-form");
 const loginButton = document.querySelector("#login-submit");
 const itemDialog = document.querySelector("#item-dialog");
 const itemForm = document.querySelector("#item-form");
+const barcodeInput = document.querySelector("#item-barcode");
+const barcodeMessage = document.querySelector("#barcode-message");
+const scannerDialog = document.querySelector("#scanner-dialog");
+const scannerVideo = document.querySelector("#scanner-video");
+const scannerStatus = document.querySelector("#scanner-status");
 const todayLabel = document.querySelector("#today-label");
 const activityList = document.querySelector("#activity-list");
 const appNotice = document.querySelector("#app-notice");
@@ -56,6 +61,10 @@ let inventoryLoaded = false;
 let inventoryAccessError = false;
 let noticeTimer;
 let legacyState = loadLegacyState();
+let scannerControls;
+let scannerReader;
+let scannerStarting = false;
+let lookupInProgress = false;
 
 function loadLegacyState() {
   try {
@@ -106,6 +115,12 @@ function showAuthMessage(message, type = "error") {
   authMessage.hidden = false;
 }
 
+function showBarcodeMessage(message, type = "error") {
+  barcodeMessage.textContent = message;
+  barcodeMessage.classList.toggle("success", type === "success");
+  barcodeMessage.hidden = false;
+}
+
 function getAuthErrorMessage(error) {
   switch (error.code) {
     case "auth/invalid-email":
@@ -132,7 +147,7 @@ function getAuthErrorMessage(error) {
 function getDatabaseErrorMessage(error) {
   const code = String(error.code || "");
   if (code.includes("PERMISSION_DENIED") || code === "database/permission-denied") {
-    return "Ingen tilgang til fellesoversikten. Kontroller e-postadressen i Realtime Database-reglene.";
+    return "Ingen tilgang til fellesoversikten. Kontroller at brukerens UID er lagt inn i Realtime Database-reglene.";
   }
   if (error.code === "NETWORK_ERROR" || error.code === "database/connection-error") {
     return "Mistet forbindelsen til Firebase. Prøver å koble til igjen.";
@@ -270,8 +285,133 @@ function openDialog(location = "fridge") {
   itemForm.reset();
   itemForm.elements.location.value = location;
   itemForm.elements.quantity.value = "1";
+  barcodeMessage.hidden = true;
   itemDialog.showModal();
   itemForm.elements.name.focus();
+}
+
+function stopScanner() {
+  scannerControls?.stop();
+  scannerControls = null;
+  scannerReader = null;
+  scannerStarting = false;
+  scannerVideo.srcObject?.getTracks().forEach((track) => track.stop());
+  scannerVideo.srcObject = null;
+}
+
+function closeScanner() {
+  stopScanner();
+  if (scannerDialog.open) scannerDialog.close();
+}
+
+async function openScanner() {
+  if (scannerStarting || scannerDialog.open) return;
+  scannerStarting = true;
+  scannerStatus.textContent = "Starter kamera …";
+  scannerDialog.showModal();
+  try {
+    const { BrowserMultiFormatReader } = await import(
+      "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm"
+    );
+    if (!scannerDialog.open) return;
+    scannerReader = new BrowserMultiFormatReader();
+    const controls = await scannerReader.decodeFromConstraints(
+      { video: { facingMode: { ideal: "environment" } } },
+      scannerVideo,
+      (result) => {
+        if (!result || !scannerDialog.open) return;
+        const barcode = result.getText().trim();
+        if (!/^\d{8,14}$/.test(barcode)) {
+          scannerStatus.textContent = "Fant en kode, men den ser ikke ut som en EAN-strekkode.";
+          return;
+        }
+        barcodeInput.value = barcode;
+        closeScanner();
+        lookupProductByBarcode(barcode);
+      }
+    );
+    scannerControls = controls;
+    scannerStarting = false;
+    if (!scannerDialog.open) {
+      stopScanner();
+      return;
+    }
+    scannerStatus.textContent = "Plasser strekkoden midt i rammen.";
+  } catch (error) {
+    console.error("Kunne ikke starte strekkodeskanneren.", error);
+    scannerStarting = false;
+    scannerStatus.textContent = error.name === "NotAllowedError"
+      ? "Gi nettleseren tilgang til kameraet, og prøv igjen."
+      : "Kameraet kunne ikke startes. Kontroller kameratilgang og bruk appens HTTPS-adresse.";
+  }
+}
+
+async function lookupProductByBarcode(barcode = barcodeInput.value.trim()) {
+  if (!/^\d{8,14}$/.test(barcode)) {
+    showBarcodeMessage("Skriv inn en strekkode på 8–14 sifre.");
+    barcodeInput.focus();
+    return;
+  }
+  if (!firebaseConfig.productLookupUrl) {
+    showBarcodeMessage("Strekkoden er lest. Produktoppslag er ikke konfigurert ennå.");
+    return;
+  }
+  if (lookupInProgress) return;
+  const endpoint = new URL(firebaseConfig.productLookupUrl);
+  if (endpoint.protocol !== "https:" && endpoint.hostname !== "localhost") {
+    showBarcodeMessage("Produktsøk må bruke en sikker HTTPS-adresse.");
+    return;
+  }
+  const user = auth.currentUser;
+  if (!user) {
+    showBarcodeMessage("Logg inn for å søke etter produkter.");
+    return;
+  }
+
+  lookupInProgress = true;
+  const lookupButton = document.querySelector("#lookup-barcode");
+  const submitButton = itemForm.querySelector('[type="submit"]');
+  lookupButton.disabled = true;
+  submitButton.disabled = true;
+  showBarcodeMessage("Søker etter varen …", "success");
+  const timeout = new AbortController();
+  const timeoutId = window.setTimeout(() => timeout.abort(), 12000);
+  try {
+    endpoint.searchParams.set("barcode", barcode);
+    const token = await user.getIdToken();
+    const response = await fetch(endpoint, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: timeout.signal
+    });
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Proxien avviste forespørselen. Kontroller at den godtar Firebase-ID-tokenet.");
+    }
+    if (response.status === 404) {
+      showBarcodeMessage("Fant ikke varen. Du kan skrive inn navnet manuelt.");
+      return;
+    }
+    if (!response.ok) throw new Error(`Produktsøket svarte med HTTP ${response.status}.`);
+    const result = await response.json();
+    const product = Array.isArray(result.data) ? result.data[0] : result.product || result.data || result;
+    if (typeof product?.name !== "string" || !product.name.trim()) {
+      throw new Error("Produktsøket returnerte ikke et varenavn i et støttet format.");
+    }
+    itemForm.elements.name.value = product.name.trim();
+    showBarcodeMessage(`Fant ${product.name.trim()}. Kontroller navn og antall før du legger til.`, "success");
+  } catch (error) {
+    console.error("Kunne ikke hente produktinformasjon fra strekkoden.", error);
+    const message = error.name === "AbortError"
+      ? "Produktsøket tok for lang tid. Prøv igjen."
+      : error instanceof TypeError
+        ? "Kunne ikke nå produktsøket. Kontroller proxy-adressen og CORS-oppsettet."
+        : error.message;
+    showBarcodeMessage(`${message} Du kan også skrive inn navnet manuelt.`);
+  } finally {
+    window.clearTimeout(timeoutId);
+    lookupInProgress = false;
+    lookupButton.disabled = false;
+    submitButton.disabled = false;
+  }
 }
 
 function createActivity(action, item, amount) {
@@ -451,6 +591,15 @@ itemDialog.addEventListener("click", (event) => {
   if (event.target === itemDialog) itemDialog.close();
 });
 
+document.querySelector("#open-scanner").addEventListener("click", openScanner);
+document.querySelector("#lookup-barcode").addEventListener("click", () => lookupProductByBarcode());
+document.querySelector("#close-scanner").addEventListener("click", closeScanner);
+document.querySelector("#cancel-scanner").addEventListener("click", closeScanner);
+scannerDialog.addEventListener("click", (event) => {
+  if (event.target === scannerDialog) closeScanner();
+});
+scannerDialog.addEventListener("close", stopScanner);
+
 itemForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (!itemForm.reportValidity()) return;
@@ -472,6 +621,7 @@ itemForm.addEventListener("submit", (event) => {
   const item = {
     id: makeId(),
     name,
+    barcode: String(formData.get("barcode")).trim(),
     location: String(formData.get("location")),
     quantity,
     unit: String(formData.get("unit")).trim(),
@@ -495,11 +645,44 @@ document.querySelectorAll(".item-list").forEach((list) => {
   });
 });
 
-document.querySelectorAll(".nav-link").forEach((link) => {
-  link.addEventListener("click", () => {
-    document.querySelectorAll(".nav-link").forEach((candidate) => candidate.classList.remove("active"));
-    link.classList.add("active");
+const viewCopy = {
+  all: {
+    title: "Matoversikt",
+    description: "Se hva du har i kjøleskapet og fryseren. Oppdater underveis."
+  },
+  fridge: {
+    title: "Kjøleskap",
+    description: "Dette har du på kjøl."
+  },
+  freezer: {
+    title: "Fryser",
+    description: "Dette har du fryst ned."
+  },
+  activity: {
+    title: "Siste aktivitet",
+    description: "Se hva som nylig er lagt til, brukt eller fjernet."
+  }
+};
+
+function setView(view) {
+  const copy = viewCopy[view];
+  if (!copy) return;
+  document.querySelectorAll(".nav-link").forEach((button) => {
+    const isCurrent = button.dataset.view === view;
+    button.classList.toggle("active", isCurrent);
+    if (isCurrent) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
   });
+  document.querySelectorAll("[data-view-panel]").forEach((panel) => {
+    panel.hidden = !panel.dataset.viewPanel.split(" ").includes(view);
+  });
+  document.querySelector("#page-title").textContent = copy.title;
+  document.querySelector("#page-description").textContent = copy.description;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+document.querySelectorAll(".nav-link").forEach((button) => {
+  button.addEventListener("click", () => setView(button.dataset.view));
 });
 
 loginForm.addEventListener("submit", async (event) => {
@@ -530,6 +713,13 @@ loginForm.addEventListener("submit", async (event) => {
 });
 
 document.querySelector("#sign-out").addEventListener("click", () => {
+  signOut(auth).catch((error) => {
+    console.error("Kunne ikke logge ut av Firebase.", error);
+    showNotice("Kunne ikke logge ut. Prøv igjen.");
+  });
+});
+
+document.querySelector("#mobile-sign-out").addEventListener("click", () => {
   signOut(auth).catch((error) => {
     console.error("Kunne ikke logge ut av Firebase.", error);
     showNotice("Kunne ikke logge ut. Prøv igjen.");
@@ -571,4 +761,5 @@ if (!firebaseConfigured) {
 }
 
 todayLabel.textContent = new Date().toLocaleDateString("nb-NO", { weekday: "short", day: "numeric", month: "short" });
+setView("all");
 render();

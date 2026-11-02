@@ -2,7 +2,7 @@
 <html lang="nb">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f6f1" />
     <title>Chill — oversikt over kjøleskap og fryser</title>
     <link rel="stylesheet" href="styles.css" />
@@ -37,18 +37,18 @@
         </a>
         <p class="sidebar-label">KJØKKENET DITT</p>
         <nav class="navigation" aria-label="Oppbevaringssteder">
-          <a class="nav-link active" href="#inventory">
+          <button class="nav-link active" type="button" data-view="all" aria-current="page">
             <span aria-hidden="true">▦</span> Alle varer
-          </a>
-          <a class="nav-link" href="#fridge">
+          </button>
+          <button class="nav-link" type="button" data-view="fridge">
             <span aria-hidden="true">◫</span> Kjøleskap
-          </a>
-          <a class="nav-link" href="#freezer">
+          </button>
+          <button class="nav-link" type="button" data-view="freezer">
             <span aria-hidden="true">❄</span> Fryser
-          </a>
-          <a class="nav-link" href="#activity">
+          </button>
+          <button class="nav-link" type="button" data-view="activity">
             <span aria-hidden="true">↗</span> Aktivitet
-          </a>
+          </button>
         </nav>
         <div class="sidebar-note">
           <span class="note-icon" aria-hidden="true">✦</span>
@@ -68,6 +68,7 @@
             <span class="today-label" id="today-label"></span>
             <span class="status-dot" id="sync-dot" aria-hidden="true"></span>
             <span class="saved-label" id="sync-status">Kobler til Firebase …</span>
+            <button class="mobile-sign-out" id="mobile-sign-out" type="button">Logg ut</button>
           </div>
         </header>
         <p class="app-notice" id="app-notice" role="status" hidden></p>
@@ -75,8 +76,8 @@
         <section class="page-heading">
           <div>
             <p class="eyebrow">MATEN DIN, PÅ ETT STED</p>
-            <h1>Matoversikt<span class="heading-period">.</span></h1>
-            <p class="page-description">Se hva du har i kjøleskapet og fryseren. Oppdater underveis.</p>
+            <h1><span id="page-title">Matoversikt</span><span class="heading-period">.</span></h1>
+            <p class="page-description" id="page-description">Se hva du har i kjøleskapet og fryseren. Oppdater underveis.</p>
           </div>
           <button class="primary-button" id="open-add" type="button">
             <span aria-hidden="true">＋</span> Legg til vare
@@ -90,7 +91,7 @@
           <button class="secondary-button" id="import-local" type="button">Importer beholdning</button>
         </section>
 
-        <section class="summary-grid" aria-label="Oversikt over varer">
+        <section class="summary-grid" data-view-panel="all" aria-label="Oversikt over varer">
           <article class="summary-card">
             <span class="summary-icon mint" aria-hidden="true">▦</span>
             <div><p>Totalt antall varer</p><strong id="total-count">0</strong></div>
@@ -108,7 +109,7 @@
           </article>
         </section>
 
-        <section class="inventory-section" id="fridge">
+        <section class="inventory-section" id="fridge" data-view-panel="all fridge">
           <div class="section-heading">
             <div class="section-title-wrap">
               <span class="location-icon fridge-icon" aria-hidden="true">◫</span>
@@ -120,7 +121,7 @@
           <div class="item-list" id="fridge-list"></div>
         </section>
 
-        <section class="inventory-section freezer-section" id="freezer">
+        <section class="inventory-section freezer-section" id="freezer" data-view-panel="all freezer">
           <div class="section-heading">
             <div class="section-title-wrap">
               <span class="location-icon freezer-icon" aria-hidden="true">❄</span>
@@ -132,7 +133,7 @@
           <div class="item-list" id="freezer-list"></div>
         </section>
 
-        <section class="activity-section" id="activity">
+        <section class="activity-section" id="activity" data-view-panel="all activity">
           <div class="section-heading activity-heading">
             <div class="section-title-wrap">
               <span class="activity-icon" aria-hidden="true">↗</span>
@@ -157,6 +158,15 @@
         </div>
         <label class="field-label" for="item-name">Hva skal du oppbevare?</label>
         <input id="item-name" name="name" type="text" maxlength="60" placeholder="f.eks. Havremelk" required />
+        <div class="barcode-field">
+          <label class="field-label" for="item-barcode">Strekkode <span class="optional">(valgfritt)</span></label>
+          <div class="barcode-controls">
+            <input id="item-barcode" name="barcode" type="text" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Skann eller skriv inn strekkode" />
+            <button class="scan-button" id="open-scanner" type="button"><span aria-hidden="true">▥</span> Skann</button>
+            <button class="lookup-button" id="lookup-barcode" type="button">Søk</button>
+          </div>
+          <p class="barcode-message" id="barcode-message" role="status" hidden></p>
+        </div>
         <div class="form-row">
           <div class="form-field">
             <label class="field-label" for="item-location">Oppbevaringssted</label>
@@ -183,6 +193,22 @@
           <button class="primary-button" type="submit">Legg til vare <span aria-hidden="true">→</span></button>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="scanner-dialog" id="scanner-dialog" aria-labelledby="scanner-title">
+      <div class="scanner-heading">
+        <div>
+          <p class="eyebrow">LEGG TIL VARE</p>
+          <h2 id="scanner-title">Skann strekkode</h2>
+        </div>
+        <button class="icon-button" id="close-scanner" type="button" aria-label="Lukk skanner">×</button>
+      </div>
+      <div class="scanner-preview">
+        <video id="scanner-video" muted playsinline></video>
+        <span class="scanner-frame" aria-hidden="true"></span>
+      </div>
+      <p class="scanner-status" id="scanner-status" role="status">Plasser strekkoden midt i rammen.</p>
+      <button class="secondary-button scanner-cancel" id="cancel-scanner" type="button">Avbryt</button>
     </dialog>
 
     <script type="module" src="app.js"></script>
