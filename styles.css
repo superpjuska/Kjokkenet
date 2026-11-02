@@ -24,6 +24,21 @@ button, input, select { font: inherit; }
 button { cursor: pointer; }
 
 .app-shell { min-height: 100vh; }
+[hidden] { display: none !important; }
+
+.auth-screen { display: grid; min-height: 100vh; place-items: center; padding: 24px; }
+.auth-card { width: min(100%, 410px); padding: 34px; border: 1px solid #e8ede8; border-radius: 14px; background: #fff; box-shadow: 0 18px 55px #20342f0d; }
+.auth-brand { margin: 0 0 35px; }
+.auth-card h1 { margin-bottom: 9px; font-size: 25px; letter-spacing: -1px; }
+.auth-description { margin: 0 0 24px; color: #84908a; font-size: 12px; line-height: 1.6; }
+.auth-card input { width: 100%; height: 42px; margin-bottom: 17px; padding: 0 11px; border: 1px solid #e2e8e2; border-radius: 6px; outline: 0; color: #33453b; font-size: 12px; }
+.auth-card input:focus { border-color: #7eaf8a; box-shadow: 0 0 0 3px #76a78320; }
+.auth-submit { width: 100%; margin-top: 3px; }
+.reset-password { display: block; margin: 13px auto 0; }
+.auth-footnote { margin: 25px 0 0; padding-top: 17px; border-top: 1px solid #eff1ee; color: #929d97; font-size: 10px; line-height: 1.5; text-align: center; }
+.auth-message { margin: 0 0 14px; color: #ad5144; font-size: 11px; line-height: 1.5; }
+.auth-message.success { color: #347553; }
+.auth-submit:disabled, .secondary-button:disabled { cursor: wait; opacity: .65; }
 
 .sidebar {
   position: fixed;
@@ -97,7 +112,10 @@ button { cursor: pointer; }
 .sidebar-footer strong, .sidebar-footer small { display: block; }
 .sidebar-footer strong { font-size: 12px; }
 .sidebar-footer small { margin-top: 3px; color: #9aa39e; font-size: 11px; }
-.footer-dots { margin-left: auto; color: #8c9892; font-size: 20px; letter-spacing: 1px; }
+.account-info { min-width: 0; flex: 1; }
+.account-info strong { overflow: hidden; max-width: 135px; text-overflow: ellipsis; white-space: nowrap; }
+.sign-out-button { padding: 5px 0 5px 5px; border: 0; background: transparent; color: #738078; font-size: 10px; }
+.sign-out-button:hover { color: #235d46; }
 
 .main-content { max-width: 1440px; min-height: 100vh; margin-left: 246px; padding: 0 57px 22px; }
 .topbar { display: flex; height: 68px; align-items: center; justify-content: space-between; border-bottom: 1px solid #e9ede8; }
@@ -106,7 +124,15 @@ button { cursor: pointer; }
 .topbar-right { display: flex; align-items: center; gap: 8px; color: #84908a; font-size: 11px; }
 .today-label { margin-right: 12px; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #65a979; }
+.status-dot.offline { background: #d29a55; }
+.status-dot.error { background: #c85f52; }
 .saved-label { color: #8b9690; }
+.app-notice { margin: 14px 0 0; padding: 10px 12px; border: 1px solid #f0d5cf; border-radius: 7px; background: #fff8f6; color: #a64e42; font-size: 11px; line-height: 1.5; }
+.app-notice.success { border-color: #d8e9da; background: #f5faf5; color: #347553; }
+.import-notice { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin: 0 0 23px; padding: 13px 15px; border: 1px solid #e2eadd; border-radius: 8px; background: #f7faf5; }
+.import-notice strong { color: #45554b; font-size: 11px; }
+.import-notice p { margin: 4px 0 0; color: #84908a; font-size: 10px; line-height: 1.5; }
+.import-notice .secondary-button { min-width: max-content; }
 
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; padding: 36px 0 24px; }
 .eyebrow { margin: 0 0 8px; color: #83928a; font-size: 9px; font-weight: 700; letter-spacing: 1.2px; }
@@ -204,7 +230,10 @@ h1 { margin-bottom: 7px; font-family: "Segoe UI", sans-serif; font-size: clamp(2
   .sidebar { position: static; width: auto; height: auto; flex-direction: row; align-items: center; justify-content: space-between; padding: 12px 18px; border-right: 0; border-bottom: 1px solid #ecefea; }
   .brand { margin: 0; font-size: 22px; }
   .brand-mark { width: 31px; height: 31px; }
-  .sidebar-label, .sidebar-note, .sidebar-footer { display: none; }
+  .sidebar-label, .sidebar-note { display: none; }
+  .sidebar-footer { display: flex; padding: 0; }
+  .account-info { display: none; }
+  .sign-out-button { font-size: 10px; }
   .navigation { display: flex; gap: 3px; }
   .nav-link { width: 37px; height: 37px; justify-content: center; padding: 0; font-size: 0; }
   .nav-link > span { font-size: 16px; }
@@ -229,12 +258,14 @@ h1 { margin-bottom: 7px; font-family: "Segoe UI", sans-serif; font-size: clamp(2
   .use-button { min-height: 27px; }
   .remove-button { width: 27px; height: 27px; }
   .activity-section { margin-top: 26px; }
+  .import-notice { align-items: flex-start; flex-direction: column; }
 }
 @media (max-width: 390px) {
   .sidebar { padding-right: 12px; padding-left: 12px; }
   .navigation { gap: 0; }
   .main-content { padding-right: 13px; padding-left: 13px; }
   .saved-label { font-size: 10px; }
+  .auth-card { padding: 25px; }
   .summary-card { gap: 6px; padding: 8px; }
   .summary-icon { width: 26px; height: 26px; flex-basis: 26px; }
   .page-heading .primary-button { gap: 4px; padding: 0 8px; }

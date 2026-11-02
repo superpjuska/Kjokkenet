@@ -8,7 +8,28 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <main class="auth-screen" id="auth-screen">
+      <section class="auth-card" aria-labelledby="auth-title">
+        <a class="brand auth-brand" href="#" aria-label="Chill hjem">
+          <span class="brand-mark" aria-hidden="true">❄</span>
+          <span>chill<span class="brand-period">.</span></span>
+        </a>
+        <p class="eyebrow">FELLES OVERSIKT</p>
+        <h1 id="auth-title">Logg inn på kjøkkenet</h1>
+        <p class="auth-description">Logg inn med brukernavn og passord for å synkronisere beholdningen mellom enhetene.</p>
+        <form id="login-form">
+          <label class="field-label" for="login-username">Brukernavn</label>
+          <input id="login-username" name="username" type="text" minlength="3" maxlength="32" pattern="[A-Za-z0-9_-]{3,32}" autocomplete="username" required />
+          <label class="field-label" for="login-password">Passord</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+          <p class="auth-message" id="auth-message" role="status" hidden></p>
+          <button class="primary-button auth-submit" id="login-submit" type="submit">Logg inn</button>
+        </form>
+        <p class="auth-footnote">Kontoer opprettes av administratoren. Kontakt administratoren hvis du trenger nytt passord.</p>
+      </section>
+    </main>
+
+    <div class="app-shell" id="app-shell" hidden>
       <aside class="sidebar">
         <a class="brand" href="#" aria-label="Chill hjem">
           <span class="brand-mark" aria-hidden="true">❄</span>
@@ -35,8 +56,8 @@
         </div>
         <div class="sidebar-footer">
           <span class="avatar" aria-hidden="true">M</span>
-          <span><strong>Kjøkkenet mitt</strong><small>Personlig oversikt</small></span>
-          <span class="footer-dots" aria-hidden="true">···</span>
+          <span class="account-info"><strong id="account-username">Bruker</strong><small>Felles kjøkken</small></span>
+          <button class="sign-out-button" id="sign-out" type="button">Logg ut</button>
         </div>
       </aside>
 
@@ -45,10 +66,11 @@
           <div class="breadcrumb">Kjøkkenet mitt <span>/</span> Beholdning</div>
           <div class="topbar-right">
             <span class="today-label" id="today-label"></span>
-            <span class="status-dot" aria-hidden="true"></span>
-            <span class="saved-label">Lagret på denne enheten</span>
+            <span class="status-dot" id="sync-dot" aria-hidden="true"></span>
+            <span class="saved-label" id="sync-status">Kobler til Firebase …</span>
           </div>
         </header>
+        <p class="app-notice" id="app-notice" role="status" hidden></p>
 
         <section class="page-heading">
           <div>
@@ -59,6 +81,13 @@
           <button class="primary-button" id="open-add" type="button">
             <span aria-hidden="true">＋</span> Legg til vare
           </button>
+        </section>
+        <section class="import-notice" id="import-notice" hidden>
+          <div>
+            <strong>Fant en lokal beholdning på denne enheten</strong>
+            <p>Importer den til fellesoversikten hvis dette er enheten med den gamle beholdningen.</p>
+          </div>
+          <button class="secondary-button" id="import-local" type="button">Importer beholdning</button>
         </section>
 
         <section class="summary-grid" aria-label="Oversikt over varer">
@@ -156,6 +185,6 @@
       </form>
     </dialog>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

@@ -1,5 +1,21 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut
+} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+import {
+  getDatabase,
+  onValue,
+  ref,
+  runTransaction
+} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
+import { firebaseConfig } from "./firebase-config.js";
+
 const STORAGE_KEY = "chill-kitchen-inventory-v1";
 const activityLimit = 12;
+const storedActivityLimit = 50;
 
 const foodEmojis = {
   milk: "🥛", cheese: "🧀", egg: "🥚", eggs: "🥚", butter: "🧈",
@@ -10,39 +26,126 @@ const foodEmojis = {
   yoghurt: "🥣", juice: "🧃", pasta: "🍝", shrimp: "🍤", avocado: "🥑"
 };
 
+const authScreen = document.querySelector("#auth-screen");
+const appShell = document.querySelector("#app-shell");
+const authMessage = document.querySelector("#auth-message");
+const loginForm = document.querySelector("#login-form");
+const loginButton = document.querySelector("#login-submit");
 const itemDialog = document.querySelector("#item-dialog");
 const itemForm = document.querySelector("#item-form");
 const todayLabel = document.querySelector("#today-label");
 const activityList = document.querySelector("#activity-list");
-let state = loadState();
+const appNotice = document.querySelector("#app-notice");
+const importNotice = document.querySelector("#import-notice");
 
-function loadState() {
+const firebaseConfigured = Boolean(
+  firebaseConfig.apiKey
+  && firebaseConfig.appId
+  && !firebaseConfig.apiKey.startsWith("YOUR_")
+  && !firebaseConfig.appId.startsWith("YOUR_")
+);
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const database = getDatabase(firebaseApp);
+const inventoryRef = ref(database, "inventory");
+let state = { items: [], activity: [] };
+let unsubscribeInventory;
+let unsubscribeConnection;
+let connected = false;
+let inventoryLoaded = false;
+let inventoryAccessError = false;
+let noticeTimer;
+let legacyState = loadLegacyState();
+
+function loadLegacyState() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return { items: [], activity: [] };
+    if (!saved) return null;
     const parsed = JSON.parse(saved);
     if (!Array.isArray(parsed.items) || !Array.isArray(parsed.activity)) {
-      throw new Error("Saved inventory has an unexpected format.");
+      throw new Error("Den lokale beholdningen har et ukjent format.");
     }
-    return parsed;
+    return parsed.items.length > 0 ? parsed : null;
   } catch (error) {
-    console.error("Could not load the saved inventory.", error);
-    return { items: [], activity: [] };
-  }
-}
-
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    document.querySelector(".saved-label").textContent = "Lagret på denne enheten";
-  } catch (error) {
-    console.error("Could not save the inventory to this device.", error);
-    document.querySelector(".saved-label").textContent = "Kunne ikke lagre";
+    console.error("Kunne ikke lese den lokale beholdningen.", error);
+    return null;
   }
 }
 
 function makeId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[character]);
+}
+
+function setSyncStatus(message, status = "connected") {
+  const statusLabel = document.querySelector("#sync-status");
+  const statusDot = document.querySelector("#sync-dot");
+  statusLabel.textContent = message;
+  statusDot.classList.toggle("offline", status === "offline");
+  statusDot.classList.toggle("error", status === "error");
+}
+
+function showNotice(message, type = "error") {
+  window.clearTimeout(noticeTimer);
+  appNotice.textContent = message;
+  appNotice.classList.toggle("success", type === "success");
+  appNotice.hidden = false;
+  noticeTimer = window.setTimeout(() => {
+    appNotice.hidden = true;
+  }, 7000);
+}
+
+function showAuthMessage(message, type = "error") {
+  authMessage.textContent = message;
+  authMessage.classList.toggle("success", type === "success");
+  authMessage.hidden = false;
+}
+
+function getAuthErrorMessage(error) {
+  switch (error.code) {
+    case "auth/invalid-email":
+      return "Brukernavnet er ugyldig. Bruk 3–32 bokstaver, tall, bindestreker eller understreker.";
+    case "auth/invalid-credential":
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+      return "Brukernavnet eller passordet stemmer ikke.";
+    case "auth/too-many-requests":
+      return "For mange forsøk. Vent litt før du prøver igjen.";
+    case "auth/network-request-failed":
+      return "Kunne ikke koble til Firebase. Sjekk internettforbindelsen.";
+    case "auth/operation-not-allowed":
+      return "E-post/passord er ikke aktivert i Firebase Authentication.";
+    case "auth/invalid-api-key":
+      return "Firebase-konfigurasjonen mangler en gyldig API-nøkkel.";
+    case "auth/user-disabled":
+      return "Denne kontoen er deaktivert. Kontakt administratoren.";
+    default:
+      return "Innloggingen mislyktes. Kontroller Firebase-oppsettet og prøv igjen.";
+  }
+}
+
+function getDatabaseErrorMessage(error) {
+  const code = String(error.code || "");
+  if (code.includes("PERMISSION_DENIED") || code === "database/permission-denied") {
+    return "Ingen tilgang til fellesoversikten. Kontroller e-postadressen i Realtime Database-reglene.";
+  }
+  if (error.code === "NETWORK_ERROR" || error.code === "database/connection-error") {
+    return "Mistet forbindelsen til Firebase. Prøver å koble til igjen.";
+  }
+  return "Kunne ikke synkronisere med Firebase. Kontroller databaseoppsettet.";
+}
+
+function updateImportVisibility() {
+  importNotice.hidden = !(
+    legacyState
+    && connected
+    && state.items.length === 0
+  );
 }
 
 function render() {
@@ -56,6 +159,7 @@ function render() {
   renderItems("fridge", fridgeItems);
   renderItems("freezer", freezerItems);
   renderActivity();
+  updateImportVisibility();
 }
 
 function renderItems(location, items) {
@@ -70,12 +174,11 @@ function renderItems(location, items) {
   list.replaceChildren(...items.map((item) => {
     const row = document.createElement("article");
     row.className = "item-row";
-    const emoji = getEmoji(item.name);
     const expiry = getExpiry(item.expiry);
     const quantity = formatQuantity(item.quantity);
     row.innerHTML = `
       <div class="item-name">
-        <span class="food-emoji" aria-hidden="true">${emoji}</span>
+        <span class="food-emoji" aria-hidden="true">${getEmoji(item.name)}</span>
         <div><strong></strong><small>Lagt til ${formatDate(item.createdAt)}</small></div>
       </div>
       <div class="quantity-control" aria-label="Antallskontroll for ${escapeHtml(item.name)}">
@@ -103,7 +206,7 @@ function renderActivity() {
     row.className = "activity-row";
     const wasRemoved = entry.action === "removed";
     const wasUsed = entry.action === "used";
-    const symbol = wasRemoved ? "×" : wasUsed ? "−" : entry.action === "added" ? "+" : "+";
+    const symbol = wasRemoved ? "×" : wasUsed ? "−" : "+";
     const description = wasRemoved
       ? `Fjernet <strong>${escapeHtml(entry.name)}</strong> fra ${getLocationName(entry.location)}`
       : wasUsed
@@ -148,7 +251,8 @@ function formatQuantity(quantity) {
 }
 
 function formatDate(value) {
-  return new Date(value).toLocaleDateString("nb-NO", { day: "numeric", month: "short" });
+  const date = value ? new Date(value) : new Date();
+  return date.toLocaleDateString("nb-NO", { day: "numeric", month: "short" });
 }
 
 function formatRelative(value) {
@@ -162,31 +266,178 @@ function formatRelative(value) {
   return time.toLocaleDateString("nb-NO", { day: "numeric", month: "short" });
 }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  })[character]);
-}
-
-function addActivity(action, item, amount) {
-  state.activity.unshift({
-    id: makeId(),
-    action,
-    name: item.name,
-    location: item.location,
-    amount,
-    unit: item.unit,
-    at: new Date().toISOString()
-  });
-  state.activity = state.activity.slice(0, 50);
-}
-
 function openDialog(location = "fridge") {
   itemForm.reset();
   itemForm.elements.location.value = location;
   itemForm.elements.quantity.value = "1";
   itemDialog.showModal();
   itemForm.elements.name.focus();
+}
+
+function createActivity(action, item, amount) {
+  return {
+    id: makeId(),
+    action,
+    name: item.name,
+    location: item.location,
+    amount,
+    unit: item.unit || "",
+    at: new Date().toISOString()
+  };
+}
+
+function trimActivity(activity) {
+  return Object.fromEntries(
+    Object.entries(activity)
+      .sort(([, first], [, second]) => String(second.at || "").localeCompare(String(first.at || "")))
+      .slice(0, storedActivityLimit)
+  );
+}
+
+function onInventoryChanged(snapshot) {
+  const inventory = snapshot.val() || {};
+  inventoryLoaded = true;
+  inventoryAccessError = false;
+  const items = inventory.items || {};
+  const activity = inventory.activity || {};
+  state.items = Object.entries(items)
+    .map(([id, item]) => ({ ...item, id: item.id || id }))
+    .sort((first, second) => String(second.createdAt || "").localeCompare(String(first.createdAt || "")));
+  state.activity = Object.entries(activity)
+    .map(([id, entry]) => ({ ...entry, id: entry.id || id }))
+    .sort((first, second) => String(second.at || "").localeCompare(String(first.at || "")));
+  render();
+  if (connected) setSyncStatus("Synkronisert");
+}
+
+function listenForInventory() {
+  unsubscribeInventory?.();
+  unsubscribeConnection?.();
+  connected = false;
+  inventoryLoaded = false;
+  inventoryAccessError = false;
+  setSyncStatus("Kobler til Firebase …", "offline");
+  unsubscribeInventory = onValue(inventoryRef, onInventoryChanged, (error) => {
+    inventoryAccessError = true;
+    console.error("Kunne ikke lese fellesoversikten fra Firebase.", error);
+    setSyncStatus("Synkronisering feilet", "error");
+    showNotice(getDatabaseErrorMessage(error));
+  });
+  unsubscribeConnection = onValue(ref(database, ".info/connected"), (snapshot) => {
+    connected = snapshot.val() === true;
+    if (!connected) {
+      setSyncStatus("Frakoblet – kobler til …", "offline");
+    } else if (inventoryAccessError) {
+      setSyncStatus("Ingen tilgang til fellesoversikten", "error");
+    } else if (inventoryLoaded) {
+      setSyncStatus("Synkronisert");
+    } else {
+      setSyncStatus("Laster fellesoversikten …", "offline");
+      updateImportVisibility();
+    }
+  });
+}
+
+async function commitInventoryChange(changeInventory) {
+  const result = await runTransaction(inventoryRef, (current) => {
+    const inventory = current && typeof current === "object" ? current : {};
+    return changeInventory(inventory);
+  }, { applyLocally: false });
+  return result;
+}
+
+async function addItem(item) {
+  const entry = createActivity("added", item, item.quantity);
+  const result = await commitInventoryChange((current) => {
+    const items = { ...(current.items || {}) };
+    const activity = { ...(current.activity || {}) };
+    if (items[item.id]) return;
+    items[item.id] = item;
+    activity[entry.id] = entry;
+    return { ...current, items, activity: trimActivity(activity) };
+  });
+  if (!result.committed) throw new Error("Varen kunne ikke legges til i fellesoversikten.");
+}
+
+async function updateItem(itemId, action) {
+  const entryId = makeId();
+  const activityTime = new Date().toISOString();
+  let actionApplied = false;
+  const result = await commitInventoryChange((current) => {
+    const items = { ...(current.items || {}) };
+    const activity = { ...(current.activity || {}) };
+    const item = items[itemId];
+    if (!item || !Number.isFinite(Number(item.quantity))) return;
+
+    let updatedItem;
+    let amount;
+    if (action === "use") {
+      if (item.quantity <= 0) return;
+      amount = Math.min(1, item.quantity);
+      const remaining = Math.max(0, Number((item.quantity - amount).toFixed(2)));
+      updatedItem = { ...item, quantity: remaining };
+      if (remaining === 0) delete items[itemId];
+      else items[itemId] = updatedItem;
+    } else if (action === "add") {
+      amount = 1;
+      updatedItem = { ...item, quantity: Number((item.quantity + 1).toFixed(2)) };
+      items[itemId] = updatedItem;
+    } else if (action === "remove") {
+      amount = item.quantity;
+      delete items[itemId];
+    } else {
+      return;
+    }
+
+    activity[entryId] = {
+      id: entryId,
+      action: action === "add" ? "restocked" : action === "use" ? "used" : "removed",
+      name: item.name,
+      location: item.location,
+      amount,
+      unit: item.unit || "",
+      at: activityTime
+    };
+    actionApplied = true;
+    return { ...current, items, activity: trimActivity(activity) };
+  });
+
+  if (!result.committed && actionApplied) {
+    throw new Error("Endringen ble ikke lagret. Prøv igjen.");
+  }
+}
+
+async function importLegacyInventory() {
+  if (!legacyState) return;
+  const items = Object.fromEntries(legacyState.items.map((item) => {
+    const id = item.id || makeId();
+    return [id, { ...item, id, createdAt: item.createdAt || new Date().toISOString() }];
+  }));
+  const activity = Object.fromEntries(legacyState.activity.map((entry) => {
+    const id = entry.id || makeId();
+    return [id, { ...entry, id, at: entry.at || new Date().toISOString() }];
+  }));
+  const result = await commitInventoryChange((current) => {
+    if (Object.keys(current.items || {}).length > 0) return;
+    return { ...current, items, activity: trimActivity({ ...(current.activity || {}), ...activity }) };
+  });
+  if (!result.committed) {
+    showNotice("Fellesoversikten har allerede varer. Den lokale beholdningen ble ikke importert.");
+    return;
+  }
+  localStorage.removeItem(STORAGE_KEY);
+  legacyState = null;
+  updateImportVisibility();
+  showNotice("Beholdningen er importert til fellesoversikten.", "success");
+}
+
+function handleDatabaseAction(action, itemId) {
+  updateItem(itemId, action).catch((error) => {
+    console.error("Kunne ikke oppdatere varen i Firebase.", error);
+    showNotice(error.message === "Endringen ble ikke lagret. Prøv igjen."
+      ? error.message
+      : getDatabaseErrorMessage(error));
+  });
 }
 
 document.querySelector("#open-add").addEventListener("click", () => openDialog());
@@ -196,7 +447,6 @@ document.querySelectorAll(".add-location").forEach((button) => {
 document.querySelectorAll(".close-dialog").forEach((button) => {
   button.addEventListener("click", () => itemDialog.close());
 });
-
 itemDialog.addEventListener("click", (event) => {
   if (event.target === itemDialog) itemDialog.close();
 });
@@ -212,49 +462,36 @@ itemForm.addEventListener("submit", (event) => {
     itemForm.elements.quantity.setCustomValidity("");
     return;
   }
+  const name = String(formData.get("name")).trim();
+  if (!name) {
+    itemForm.elements.name.setCustomValidity("Skriv inn navnet på varen.");
+    itemForm.reportValidity();
+    itemForm.elements.name.setCustomValidity("");
+    return;
+  }
   const item = {
     id: makeId(),
-    name: String(formData.get("name")).trim(),
+    name,
     location: String(formData.get("location")),
     quantity,
     unit: String(formData.get("unit")).trim(),
     expiry: String(formData.get("expiry")),
     createdAt: new Date().toISOString()
   };
-  if (!item.name) {
-    itemForm.elements.name.setCustomValidity("Skriv inn navnet på varen.");
-    itemForm.reportValidity();
-    itemForm.elements.name.setCustomValidity("");
-    return;
-  }
-  state.items.unshift(item);
-  addActivity("added", item, item.quantity);
-  saveState();
-  render();
-  itemDialog.close();
+  addItem(item).then(() => {
+    itemDialog.close();
+  }).catch((error) => {
+    console.error("Kunne ikke legge til varen i Firebase.", error);
+    showNotice(error.message === "Varen kunne ikke legges til i fellesoversikten."
+      ? error.message
+      : getDatabaseErrorMessage(error));
+  });
 });
 
 document.querySelectorAll(".item-list").forEach((list) => {
   list.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-action]");
-    if (!button) return;
-    const item = state.items.find((candidate) => candidate.id === button.dataset.id);
-    if (!item) return;
-    if (button.dataset.action === "use") {
-      if (item.quantity <= 0) return;
-      const usedQuantity = Math.min(1, item.quantity);
-      item.quantity = Math.max(0, Number((item.quantity - usedQuantity).toFixed(2)));
-      addActivity("used", item, usedQuantity);
-      if (item.quantity === 0) state.items = state.items.filter((candidate) => candidate.id !== item.id);
-    } else if (button.dataset.action === "add") {
-      item.quantity = Number((item.quantity + 1).toFixed(2));
-      addActivity("restocked", item, 1);
-    } else if (button.dataset.action === "remove") {
-      addActivity("removed", item, item.quantity);
-      state.items = state.items.filter((candidate) => candidate.id !== item.id);
-    }
-    saveState();
-    render();
+    if (button) handleDatabaseAction(button.dataset.action, button.dataset.id);
   });
 });
 
@@ -264,6 +501,74 @@ document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.add("active");
   });
 });
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!firebaseConfigured) {
+    showAuthMessage("Firebase-oppsettet mangler API-nøkkel eller app-ID. Se FIREBASE_SETUP.md.");
+    return;
+  }
+  if (!loginForm.reportValidity()) return;
+  const username = String(loginForm.elements.username.value).trim().toLowerCase();
+  if (!/^[a-z0-9_-]{3,32}$/.test(username)) {
+    loginForm.elements.username.setCustomValidity("Bruk 3–32 bokstaver, tall, bindestreker eller understreker.");
+    loginForm.reportValidity();
+    loginForm.elements.username.setCustomValidity("");
+    return;
+  }
+  loginButton.disabled = true;
+  authMessage.hidden = true;
+  try {
+    const password = String(loginForm.elements.password.value);
+    await signInWithEmailAndPassword(auth, `${username}@kjokkenet-cf65d.firebaseapp.com`, password);
+  } catch (error) {
+    console.error("Innlogging til Firebase mislyktes.", error);
+    showAuthMessage(getAuthErrorMessage(error));
+  } finally {
+    loginButton.disabled = false;
+  }
+});
+
+document.querySelector("#sign-out").addEventListener("click", () => {
+  signOut(auth).catch((error) => {
+    console.error("Kunne ikke logge ut av Firebase.", error);
+    showNotice("Kunne ikke logge ut. Prøv igjen.");
+  });
+});
+
+document.querySelector("#import-local").addEventListener("click", () => {
+  importLegacyInventory().catch((error) => {
+    console.error("Kunne ikke importere den lokale beholdningen.", error);
+    showNotice(getDatabaseErrorMessage(error));
+  });
+});
+
+onAuthStateChanged(auth, (user) => {
+  if (unsubscribeInventory) unsubscribeInventory();
+  if (unsubscribeConnection) unsubscribeConnection();
+  unsubscribeInventory = null;
+  unsubscribeConnection = null;
+  if (!user) {
+    state = { items: [], activity: [] };
+    authScreen.hidden = false;
+    appShell.hidden = true;
+    return;
+  }
+  state = { items: [], activity: [] };
+  render();
+  authScreen.hidden = true;
+  appShell.hidden = false;
+  document.querySelector("#account-username").textContent = user.email?.split("@")[0] || "Innlogget";
+  listenForInventory();
+}, (error) => {
+  console.error("Firebase Authentication kunne ikke initialiseres.", error);
+  showAuthMessage(getAuthErrorMessage(error));
+});
+
+if (!firebaseConfigured) {
+  showAuthMessage("Firebase-oppsettet mangler API-nøkkel eller app-ID. Se FIREBASE_SETUP.md.");
+  loginButton.disabled = true;
+}
 
 todayLabel.textContent = new Date().toLocaleDateString("nb-NO", { weekday: "short", day: "numeric", month: "short" });
 render();
