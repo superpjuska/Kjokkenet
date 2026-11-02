@@ -3,8 +3,8 @@
     ".read": false,
     ".write": false,
     "inventory": {
-      ".read": "auth != null && (auth.uid === 'markus@fryser.no' || auth.uid === 'marte@fryser.no')",
-      ".write": "auth != null && (auth.uid === 'marte@fryser.no' || auth.uid === 'markus@fryser.no')"
+      ".read": "auth != null && (auth.uid === 'JUcrLQo9wJQ8gzWzB4hCvEtAk1H2' || auth.uid === 'aYU9BA1ACTfSyH5ale0DecurPt12')",
+      ".write": "auth != null && (auth.uid === 'aYU9BA1ACTfSyH5ale0DecurPt12' || auth.uid === 'JUcrLQo9wJQ8gzWzB4hCvEtAk1H2')"
     }
   }
 }
