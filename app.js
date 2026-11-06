@@ -174,13 +174,21 @@ function updateImportVisibility() {
 function render() {
   const fridgeItems = state.items.filter((item) => item.location === "fridge");
   const freezerItems = state.items.filter((item) => item.location === "freezer");
+  const drygoodsItems = state.items.filter((item) => item.location === "drygoods");
+  const laundryItems = state.items.filter((item) => item.location === "laundry");
   document.querySelector("#total-count").textContent = String(state.items.length);
   document.querySelector("#fridge-count").textContent = String(fridgeItems.length);
   document.querySelector("#freezer-count").textContent = String(freezerItems.length);
+  document.querySelector("#drygoods-count").textContent = String(drygoodsItems.length);
+  document.querySelector("#laundry-count").textContent = String(laundryItems.length);
   document.querySelector("#fridge-pill").textContent = String(fridgeItems.length);
   document.querySelector("#freezer-pill").textContent = String(freezerItems.length);
+  document.querySelector("#drygoods-pill").textContent = String(drygoodsItems.length);
+  document.querySelector("#laundry-pill").textContent = String(laundryItems.length);
   renderItems("fridge", fridgeItems);
   renderItems("freezer", freezerItems);
+  renderItems("drygoods", drygoodsItems);
+  renderItems("laundry", laundryItems);
   renderActivity();
   updateImportVisibility();
 }
@@ -188,8 +196,13 @@ function render() {
 function renderItems(location, items) {
   const list = document.querySelector(`#${location}-list`);
   if (items.length === 0) {
-    const icon = location === "fridge" ? "🥬" : "❄";
-    const locationName = location === "fridge" ? "kjøleskapet" : "fryseren";
+    const emptyStates = {
+      fridge: { icon: "🥬", name: "kjøleskapet" },
+      freezer: { icon: "❄", name: "fryseren" },
+      drygoods: { icon: "▤", name: "tørrvarelageret" },
+      laundry: { icon: "▣", name: "vaskerommet" }
+    };
+    const { icon, name: locationName } = emptyStates[location];
     list.innerHTML = `<div class="empty-state"><span aria-hidden="true">${icon}</span><div><strong>Ingen varer her ennå</strong>Legg til din første vare i ${locationName} for å komme i gang.</div></div>`;
     return;
   }
@@ -249,7 +262,12 @@ function getEmoji(name) {
 }
 
 function getLocationName(location) {
-  return location === "freezer" ? "fryseren" : "kjøleskapet";
+  return ({
+    fridge: "kjøleskapet",
+    freezer: "fryseren",
+    drygoods: "tørrvarelageret",
+    laundry: "vaskerommet"
+  })[location] || "beholdningen";
 }
 
 function getExpiry(expiry) {
@@ -734,7 +752,7 @@ document.querySelectorAll(".item-list").forEach((list) => {
 const viewCopy = {
   all: {
     title: "Matoversikt",
-    description: "Se hva du har i kjøleskapet og fryseren. Oppdater underveis."
+    description: "Se hva du har på kjøkkenet og vaskerommet. Oppdater underveis."
   },
   fridge: {
     title: "Kjøleskap",
@@ -743,6 +761,14 @@ const viewCopy = {
   freezer: {
     title: "Fryser",
     description: "Dette har du fryst ned."
+  },
+  drygoods: {
+    title: "Tørrvarer",
+    description: "Dette har du i tørrvarelageret."
+  },
+  laundry: {
+    title: "Vaskerom",
+    description: "Dette har du på vaskerommet."
   },
   activity: {
     title: "Siste aktivitet",
