@@ -4,5 +4,5 @@ export const firebaseConfig = {
   databaseURL: "https://kjokkenet-cf65d-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "kjokkenet-cf65d",
   appId: "1:531933717261:web:aa7ee5096a21c179df4644",
-  productLookupUrl: "kassalapp-lookup.dndf97rfy4.workers.dev"
+  productLookupUrl: "https://kassalapp-lookup.dndf97rfy4.workers.dev"
 };

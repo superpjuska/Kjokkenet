@@ -5,13 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f6f1" />
     <title>Chill — oversikt over kjøleskap og fryser</title>
+    <link rel="icon" type="image/png" href="Storage%20Checklist%20Organizer%20Icon.png" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="auth-screen" id="auth-screen">
       <section class="auth-card" aria-labelledby="auth-title">
         <a class="brand auth-brand" href="#" aria-label="Chill hjem">
-          <span class="brand-mark" aria-hidden="true">❄</span>
+          <img class="brand-mark" src="Storage%20Checklist%20Organizer%20Icon.png" alt="" />
           <span>chill<span class="brand-period">.</span></span>
         </a>
         <p class="eyebrow">FELLES OVERSIKT</p>
@@ -32,7 +33,7 @@
     <div class="app-shell" id="app-shell" hidden>
       <aside class="sidebar">
         <a class="brand" href="#" aria-label="Chill hjem">
-          <span class="brand-mark" aria-hidden="true">❄</span>
+          <img class="brand-mark" src="Storage%20Checklist%20Organizer%20Icon.png" alt="" />
           <span>chill<span class="brand-period">.</span></span>
         </a>
         <p class="sidebar-label">KJØKKENET DITT</p>
@@ -166,6 +167,7 @@
             <button class="lookup-button" id="lookup-barcode" type="button">Søk</button>
           </div>
           <p class="barcode-message" id="barcode-message" role="status" hidden></p>
+          <button class="catalog-save-button" id="save-catalog-product" type="button" hidden>Legg til i produktbiblioteket</button>
         </div>
         <div class="form-row">
           <div class="form-field">

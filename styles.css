@@ -67,14 +67,12 @@ button { cursor: pointer; }
 }
 
 .brand-mark {
-  display: grid;
+  display: block;
   width: 34px;
   height: 34px;
-  place-items: center;
-  border-radius: 11px;
-  background: #eaf5ee;
-  color: #3f8b66;
-  font-size: 19px;
+  flex: 0 0 34px;
+  border-radius: 8px;
+  object-fit: contain;
 }
 
 .brand-period, .heading-period { color: #6caa7f; }
@@ -239,6 +237,8 @@ h1 { margin-bottom: 7px; font-family: "Segoe UI", sans-serif; font-size: clamp(2
 .scan-button:hover, .lookup-button:hover:not(:disabled) { border-color: #b3d1ba; background: #edf6ee; }
 .barcode-message { margin: 7px 0 0; color: #ad5144; font-size: 10px; line-height: 1.5; }
 .barcode-message.success { color: #347553; }
+.catalog-save-button { margin-top: 8px; padding: 0; border: 0; background: transparent; color: #347553; font-size: 11px; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.catalog-save-button:disabled { cursor: wait; opacity: .6; }
 .scan-button:disabled, .lookup-button:disabled { cursor: wait; opacity: .6; }
 .form-row { display: grid; grid-template-columns: 1.1fr .75fr 1fr; gap: 11px; margin: 17px 0; }
 .form-field { min-width: 0; }

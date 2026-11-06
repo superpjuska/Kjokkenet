@@ -7,6 +7,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import {
   getDatabase,
+  get,
   onValue,
   ref,
   runTransaction
@@ -35,6 +36,7 @@ const itemDialog = document.querySelector("#item-dialog");
 const itemForm = document.querySelector("#item-form");
 const barcodeInput = document.querySelector("#item-barcode");
 const barcodeMessage = document.querySelector("#barcode-message");
+const saveCatalogButton = document.querySelector("#save-catalog-product");
 const scannerDialog = document.querySelector("#scanner-dialog");
 const scannerVideo = document.querySelector("#scanner-video");
 const scannerStatus = document.querySelector("#scanner-status");
@@ -166,9 +168,13 @@ function updateImportVisibility() {
 function render() {
   const fridgeItems = state.items.filter((item) => item.location === "fridge");
   const freezerItems = state.items.filter((item) => item.location === "freezer");
+    const drygoodsItems = state.items.filter((item) => item.location === "drygoods");
+    const laundryItems = state.items.filter((item) => item.location === "laundry");
   document.querySelector("#total-count").textContent = String(state.items.length);
   document.querySelector("#fridge-count").textContent = String(fridgeItems.length);
   document.querySelector("#freezer-count").textContent = String(freezerItems.length);
+    document.querySelector("#drygoods-count").textContent = String(drygoodsItems.length);
+    document.querySelector("#laundry-count").textContent = String(laundryItems.length);
   document.querySelector("#fridge-pill").textContent = String(fridgeItems.length);
   document.querySelector("#freezer-pill").textContent = String(freezerItems.length);
   renderItems("fridge", fridgeItems);
@@ -286,6 +292,7 @@ function openDialog(location = "fridge") {
   itemForm.elements.location.value = location;
   itemForm.elements.quantity.value = "1";
   barcodeMessage.hidden = true;
+  saveCatalogButton.hidden = true;
   itemDialog.showModal();
   itemForm.elements.name.focus();
 }
@@ -352,16 +359,8 @@ async function lookupProductByBarcode(barcode = barcodeInput.value.trim()) {
     barcodeInput.focus();
     return;
   }
-  if (!firebaseConfig.productLookupUrl) {
-    showBarcodeMessage("Strekkoden er lest. Produktoppslag er ikke konfigurert ennå.");
-    return;
-  }
   if (lookupInProgress) return;
-  const endpoint = new URL(firebaseConfig.productLookupUrl);
-  if (endpoint.protocol !== "https:" && endpoint.hostname !== "localhost") {
-    showBarcodeMessage("Produktsøk må bruke en sikker HTTPS-adresse.");
-    return;
-  }
+  let endpoint;
   const user = auth.currentUser;
   if (!user) {
     showBarcodeMessage("Logg inn for å søke etter produkter.");
@@ -374,11 +373,36 @@ async function lookupProductByBarcode(barcode = barcodeInput.value.trim()) {
   lookupButton.disabled = true;
   submitButton.disabled = true;
   showBarcodeMessage("Søker etter varen …", "success");
-  const timeout = new AbortController();
-  const timeoutId = window.setTimeout(() => timeout.abort(), 12000);
+  let timeoutId;
   try {
+    saveCatalogButton.hidden = true;
+    showBarcodeMessage("Sjekker produktbiblioteket …", "success");
+    const catalogSnapshot = await get(ref(database, `productCatalog/${barcode}`));
+    const catalogProduct = catalogSnapshot.val();
+    if (typeof catalogProduct?.name === "string" && catalogProduct.name.trim()) {
+      itemForm.elements.name.value = catalogProduct.name.trim();
+      showBarcodeMessage(`Fant ${catalogProduct.name.trim()} i produktbiblioteket.`, "success");
+      return;
+    }
+    if (!firebaseConfig.productLookupUrl) {
+      offerCatalogSave("Fant ikke varen i produktbiblioteket. Skriv inn navnet for å lagre den.");
+      return;
+    }
+    try {
+      endpoint = new URL(firebaseConfig.productLookupUrl);
+    } catch {
+      offerCatalogSave("Proxy-adressen er ugyldig. Kontroller produktLookupUrl i firebase-config.js.");
+      return;
+    }
+    if (endpoint.protocol !== "https:" && endpoint.hostname !== "localhost") {
+      offerCatalogSave("Produktsøk må bruke en sikker HTTPS-adresse.");
+      return;
+    }
+    showBarcodeMessage("Søker etter varen …", "success");
     endpoint.searchParams.set("barcode", barcode);
     const token = await user.getIdToken();
+    const timeout = new AbortController();
+    timeoutId = window.setTimeout(() => timeout.abort(), 12000);
     const response = await fetch(endpoint, {
       headers: { Authorization: `Bearer ${token}` },
       signal: timeout.signal
@@ -387,7 +411,7 @@ async function lookupProductByBarcode(barcode = barcodeInput.value.trim()) {
       throw new Error("Proxien avviste forespørselen. Kontroller at den godtar Firebase-ID-tokenet.");
     }
     if (response.status === 404) {
-      showBarcodeMessage("Fant ikke varen. Du kan skrive inn navnet manuelt.");
+      offerCatalogSave("Fant ikke varen. Skriv inn navnet for å lagre den i produktbiblioteket.");
       return;
     }
     if (!response.ok) throw new Error(`Produktsøket svarte med HTTP ${response.status}.`);
@@ -400,16 +424,75 @@ async function lookupProductByBarcode(barcode = barcodeInput.value.trim()) {
     showBarcodeMessage(`Fant ${product.name.trim()}. Kontroller navn og antall før du legger til.`, "success");
   } catch (error) {
     console.error("Kunne ikke hente produktinformasjon fra strekkoden.", error);
-    const message = error.name === "AbortError"
-      ? "Produktsøket tok for lang tid. Prøv igjen."
-      : error instanceof TypeError
-        ? "Kunne ikke nå produktsøket. Kontroller proxy-adressen og CORS-oppsettet."
-        : error.message;
-    showBarcodeMessage(`${message} Du kan også skrive inn navnet manuelt.`);
+    const errorCode = String(error.code || "");
+    const message = errorCode.includes("PERMISSION_DENIED") || errorCode.startsWith("database/")
+      ? getDatabaseErrorMessage(error)
+      : error.name === "AbortError"
+        ? "Produktsøket tok for lang tid. Prøv igjen."
+        : error instanceof TypeError
+          ? "Kunne ikke nå produktsøket. Kontroller proxy-adressen og CORS-oppsettet."
+          : error.message;
+    offerCatalogSave(`${message} Skriv inn navnet for å lagre varen manuelt.`);
   } finally {
     window.clearTimeout(timeoutId);
     lookupInProgress = false;
     lookupButton.disabled = false;
+    submitButton.disabled = false;
+  }
+}
+
+function offerCatalogSave(message) {
+  saveCatalogButton.hidden = false;
+  showBarcodeMessage(message);
+  itemForm.elements.name.focus();
+}
+
+async function saveProductToCatalog() {
+  const barcode = barcodeInput.value.trim();
+  const name = itemForm.elements.name.value.trim();
+  if (!/^\d{8,14}$/.test(barcode)) {
+    showBarcodeMessage("Skriv inn en strekkode på 8–14 sifre.");
+    barcodeInput.focus();
+    return;
+  }
+  if (!name) {
+    showBarcodeMessage("Skriv inn varenavnet før du lagrer i produktbiblioteket.");
+    itemForm.elements.name.focus();
+    return;
+  }
+  if (saveCatalogButton.disabled) return;
+  if (!auth.currentUser) {
+    showBarcodeMessage("Logg inn for å lagre varer i produktbiblioteket.");
+    return;
+  }
+
+  saveCatalogButton.disabled = true;
+  const submitButton = itemForm.querySelector('[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    const result = await runTransaction(ref(database, `productCatalog/${barcode}`), (current) => {
+      if (current) return;
+      return { name, createdAt: new Date().toISOString() };
+    }, { applyLocally: false });
+    const savedProduct = result.snapshot.val();
+    if (!result.committed) {
+      if (typeof savedProduct?.name !== "string" || !savedProduct.name.trim()) {
+        throw new Error("Produktet finnes allerede i biblioteket, men har ikke et gyldig varenavn.");
+      }
+      itemForm.elements.name.value = savedProduct.name.trim();
+      showBarcodeMessage(`Strekkoden finnes allerede som ${savedProduct.name.trim()} i produktbiblioteket.`, "success");
+      saveCatalogButton.hidden = true;
+      return;
+    }
+    showBarcodeMessage(`${name} er lagret i det delte produktbiblioteket. Legg til varen for å føre den i beholdningen.`, "success");
+    saveCatalogButton.hidden = true;
+  } catch (error) {
+    console.error("Kunne ikke lagre varen i produktbiblioteket.", error);
+    showBarcodeMessage(error.code
+      ? getDatabaseErrorMessage(error)
+      : error.message || "Kunne ikke lagre varen i produktbiblioteket.");
+  } finally {
+    saveCatalogButton.disabled = false;
     submitButton.disabled = false;
   }
 }
@@ -593,6 +676,7 @@ itemDialog.addEventListener("click", (event) => {
 
 document.querySelector("#open-scanner").addEventListener("click", openScanner);
 document.querySelector("#lookup-barcode").addEventListener("click", () => lookupProductByBarcode());
+saveCatalogButton.addEventListener("click", saveProductToCatalog);
 document.querySelector("#close-scanner").addEventListener("click", closeScanner);
 document.querySelector("#cancel-scanner").addEventListener("click", closeScanner);
 scannerDialog.addEventListener("click", (event) => {
