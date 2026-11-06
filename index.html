@@ -20,7 +20,7 @@
         <p class="auth-description">Logg inn med brukernavn og passord for å synkronisere beholdningen mellom enhetene.</p>
         <form id="login-form">
           <label class="field-label" for="login-username">Brukernavn</label>
-          <input id="login-username" name="username" type="text" minlength="3" maxlength="32" pattern="[A-Za-z0-9_-]{3,32}" autocomplete="username" required />
+          <input id="login-username" name="username" type="text" minlength="3" maxlength="32" pattern="[A-Za-z0-9_\x2d]{3,32}" autocomplete="username" required />
           <label class="field-label" for="login-password">Passord</label>
           <input id="login-password" name="password" type="password" autocomplete="current-password" required />
           <p class="auth-message" id="auth-message" role="status" hidden></p>

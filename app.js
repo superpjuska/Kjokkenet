@@ -62,6 +62,7 @@ let connected = false;
 let inventoryLoaded = false;
 let inventoryAccessError = false;
 let noticeTimer;
+let loginInProgress = false;
 let legacyState = loadLegacyState();
 let scannerControls;
 let scannerReader;
@@ -786,11 +787,13 @@ loginForm.addEventListener("submit", async (event) => {
   }
   loginButton.disabled = true;
   loginButton.textContent = "Logger inn …";
+  loginInProgress = true;
   showAuthMessage("Kobler til Firebase …", "success");
   try {
     const password = String(loginForm.elements.password.value);
     await signInWithEmailAndPassword(auth, `${username}@kjokkenet-cf65d.firebaseapp.com`, password);
   } catch (error) {
+    loginInProgress = false;
     console.error("Innlogging til Firebase mislyktes.", error);
     showAuthMessage(getAuthErrorMessage(error));
   } finally {
@@ -837,6 +840,10 @@ onAuthStateChanged(auth, (user) => {
   appShell.hidden = false;
   document.querySelector("#account-username").textContent = user.email?.split("@")[0] || "Innlogget";
   listenForInventory();
+  if (loginInProgress) {
+    loginInProgress = false;
+    showNotice("Innlogging vellykket.", "success");
+  }
 }, (error) => {
   console.error("Firebase Authentication kunne ikke initialiseres.", error);
   showAuthMessage(getAuthErrorMessage(error));
