@@ -173,13 +173,9 @@ function updateImportVisibility() {
 function render() {
   const fridgeItems = state.items.filter((item) => item.location === "fridge");
   const freezerItems = state.items.filter((item) => item.location === "freezer");
-    const drygoodsItems = state.items.filter((item) => item.location === "drygoods");
-    const laundryItems = state.items.filter((item) => item.location === "laundry");
   document.querySelector("#total-count").textContent = String(state.items.length);
   document.querySelector("#fridge-count").textContent = String(fridgeItems.length);
   document.querySelector("#freezer-count").textContent = String(freezerItems.length);
-    document.querySelector("#drygoods-count").textContent = String(drygoodsItems.length);
-    document.querySelector("#laundry-count").textContent = String(laundryItems.length);
   document.querySelector("#fridge-pill").textContent = String(fridgeItems.length);
   document.querySelector("#freezer-pill").textContent = String(freezerItems.length);
   renderItems("fridge", fridgeItems);
