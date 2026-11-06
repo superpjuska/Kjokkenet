@@ -595,7 +595,31 @@ async function addItem(item) {
     const items = { ...(current.items || {}) };
     const activity = { ...(current.activity || {}) };
     if (items[item.id]) return;
-    items[item.id] = item;
+    const normalize = (value) => String(value || "").trim().toLocaleLowerCase("nb-NO");
+    const duplicate = Object.entries(items).find(([, storedItem]) => {
+      if (storedItem.location !== item.location) return false;
+      const storedBarcode = String(storedItem.barcode || "").trim();
+      const itemBarcode = String(item.barcode || "").trim();
+      if (storedBarcode && itemBarcode) return storedBarcode === itemBarcode;
+      return normalize(storedItem.name) === normalize(item.name)
+        && normalize(storedItem.unit) === normalize(item.unit);
+    });
+
+    if (duplicate) {
+      const [duplicateId, storedItem] = duplicate;
+      const existingQuantity = Number(storedItem.quantity);
+      if (!Number.isFinite(existingQuantity) || existingQuantity < 0) {
+        throw new Error("Varen har et ugyldig antall og kunne ikke fylles på.");
+      }
+      items[duplicateId] = {
+        ...storedItem,
+        quantity: Number((existingQuantity + item.quantity).toFixed(2)),
+        barcode: storedItem.barcode || item.barcode,
+        expiry: storedItem.expiry || item.expiry
+      };
+    } else {
+      items[item.id] = item;
+    }
     activity[entry.id] = entry;
     return { ...current, items, activity: trimActivity(activity) };
   });
