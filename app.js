@@ -135,14 +135,19 @@ function getAuthErrorMessage(error) {
       return "For mange forsøk. Vent litt før du prøver igjen.";
     case "auth/network-request-failed":
       return "Kunne ikke koble til Firebase. Sjekk internettforbindelsen.";
+    case "auth/unauthorized-domain":
+      return "Denne nettsideadressen er ikke godkjent for Firebase-pålogging. Legg til domenet under Authentication → Settings → Authorized domains i Firebase Console.";
     case "auth/operation-not-allowed":
+    case "auth/configuration-not-found":
       return "E-post/passord er ikke aktivert i Firebase Authentication.";
     case "auth/invalid-api-key":
       return "Firebase-konfigurasjonen mangler en gyldig API-nøkkel.";
+    case "auth/requests-to-this-api-are-blocked":
+      return "Firebase API-nøkkelen blokkerer pålogging. Kontroller nøkkelrestriksjonene i Google Cloud Console.";
     case "auth/user-disabled":
       return "Denne kontoen er deaktivert. Kontakt administratoren.";
     default:
-      return "Innloggingen mislyktes. Kontroller Firebase-oppsettet og prøv igjen.";
+      return `Innloggingen mislyktes (${error.code || "ukjent feil"}). Kontroller brukernavn, passord og Firebase-oppsett.`;
   }
 }
 
@@ -784,7 +789,8 @@ loginForm.addEventListener("submit", async (event) => {
     return;
   }
   loginButton.disabled = true;
-  authMessage.hidden = true;
+  loginButton.textContent = "Logger inn …";
+  showAuthMessage("Kobler til Firebase …", "success");
   try {
     const password = String(loginForm.elements.password.value);
     await signInWithEmailAndPassword(auth, `${username}@kjokkenet-cf65d.firebaseapp.com`, password);
@@ -793,6 +799,7 @@ loginForm.addEventListener("submit", async (event) => {
     showAuthMessage(getAuthErrorMessage(error));
   } finally {
     loginButton.disabled = false;
+    loginButton.textContent = "Logg inn";
   }
 });
 
