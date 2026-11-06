@@ -776,15 +776,27 @@ const viewCopy = {
   }
 };
 
+const navigation = document.querySelector(".navigation");
+const moreNavigation = document.querySelector("#more-navigation");
+const moreNavigationToggle = document.querySelector("#more-navigation-toggle");
+
+function closeMoreNavigation() {
+  moreNavigationToggle.setAttribute("aria-expanded", "false");
+  navigation.classList.remove("menu-open");
+}
+
 function setView(view) {
   const copy = viewCopy[view];
   if (!copy) return;
+  closeMoreNavigation();
   document.querySelectorAll(".nav-link").forEach((button) => {
     const isCurrent = button.dataset.view === view;
     button.classList.toggle("active", isCurrent);
+    if (button === moreNavigationToggle) return;
     if (isCurrent) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
+  moreNavigationToggle.classList.toggle("is-current", !["all", "freezer"].includes(view));
   document.querySelectorAll("[data-view-panel]").forEach((panel) => {
     panel.hidden = !panel.dataset.viewPanel.split(" ").includes(view);
   });
@@ -795,6 +807,23 @@ function setView(view) {
 
 document.querySelectorAll(".nav-link").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
+});
+
+moreNavigationToggle.addEventListener("click", () => {
+  const isExpanded = moreNavigationToggle.getAttribute("aria-expanded") === "true";
+  moreNavigationToggle.setAttribute("aria-expanded", String(!isExpanded));
+  navigation.classList.toggle("menu-open", !isExpanded);
+});
+
+document.addEventListener("click", (event) => {
+  if (!navigation.contains(event.target)) closeMoreNavigation();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && moreNavigationToggle.getAttribute("aria-expanded") === "true") {
+    closeMoreNavigation();
+    moreNavigationToggle.focus();
+  }
 });
 
 loginForm.addEventListener("submit", async (event) => {

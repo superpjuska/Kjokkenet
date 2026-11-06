@@ -4,8 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f6f1" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Kjøkkenet" />
     <title>Chill — oversikt over kjøleskap og fryser</title>
     <link rel="icon" type="image/png" href="Storage%20Checklist%20Organizer%20Icon.png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -41,20 +44,26 @@
           <button class="nav-link active" type="button" data-view="all" aria-current="page">
             <span aria-hidden="true">▦</span> Alle varer
           </button>
-          <button class="nav-link" type="button" data-view="fridge">
-            <span aria-hidden="true">◫</span> Kjøleskap
-          </button>
           <button class="nav-link" type="button" data-view="freezer">
             <span aria-hidden="true">❄</span> Fryser
           </button>
-          <button class="nav-link" type="button" data-view="drygoods">
-            <span aria-hidden="true">▤</span> Tørrvarer
-          </button>
-          <button class="nav-link" type="button" data-view="laundry">
-            <span aria-hidden="true">▣</span> Vaskerom
-          </button>
-          <button class="nav-link" type="button" data-view="activity">
-            <span aria-hidden="true">↗</span> Aktivitet
+          <div class="nav-more-items" id="more-navigation">
+            <button class="nav-link" type="button" data-view="fridge">
+              <span aria-hidden="true">◫</span> Kjøleskap
+            </button>
+            <button class="nav-link" type="button" data-view="drygoods">
+              <span aria-hidden="true">▤</span> Tørrvarer
+            </button>
+            <button class="nav-link" type="button" data-view="laundry">
+              <span aria-hidden="true">▣</span> Vaskerom
+            </button>
+            <button class="nav-link" type="button" data-view="activity">
+              <span aria-hidden="true">↗</span> Aktivitet
+            </button>
+          </div>
+          <button class="nav-link more-menu-toggle" id="more-navigation-toggle" type="button" aria-label="Flere valg" aria-controls="more-navigation" aria-expanded="false">
+            <span class="menu-glyph" aria-hidden="true"><span></span><span></span><span></span></span>
+            <span class="menu-label">Meny</span>
           </button>
         </nav>
         <div class="sidebar-note">
